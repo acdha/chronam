@@ -1,36 +1,32 @@
+import gzip
+import io
+import logging
 import os
 import os.path
 import re
-import logging
 import urllib2
 import urlparse
-
-import io
-import gzip
-
-from time import time
 from datetime import datetime
+from multiprocessing.pool import ThreadPool
+from time import time
 
 import simplejson as json
-
-from lxml import etree
-from solr import SolrConnection
-
+from django.conf import settings
 from django.core import management
 from django.db import reset_queries
 from django.db.models import Q
-from django.conf import settings
-from django.core import management
+from lxml import etree
+from solr import SolrConnection
+
+from chronam.core import models
+from chronam.core.models import OCR, Awardee, Batch, Issue, LoadBatchEvent, Page, Title
+from chronam.core.ocr_extractor import ocr_extractor
 
 try:
     import j2k
 except ImportError:
     j2k = None
 
-from chronam.core import models
-from chronam.core.models import Batch, Issue, Title, Awardee, Page, OCR
-from chronam.core.models import LoadBatchEvent
-from chronam.core.ocr_extractor import ocr_extractor
 
 # some xml namespaces used in batch metadata
 ns = {
@@ -278,13 +274,22 @@ class BatchLoader(object):
         issue.save()
 
         # attach pages: lots of logging because it's expensive
-        for page_div in div.xpath('.//mets:div[@TYPE="np:page"]',
-                                  namespaces=ns):
+        pool = ThreadPool(processes=8)
+
+        def logged_load_page(doc, page_div, issue):
             try:
-                page = self._load_page(doc, page_div, issue)
-                self.pages_processed += 1
-            except BatchLoaderException, e:
+                return self._load_page(doc, page_div, issue)
+            except BatchLoaderException as e:
                 _logger.exception(e)
+
+        page_params = [(doc, page_div, issue) for page_div in div.xpath('.//mets:div[@TYPE="np:page"]',
+                                                                        namespaces=ns)]
+
+        for i in pool.imap_unordered(logged_load_page, page_params):
+            self.pages_processed += 1
+
+        pool.close()
+        pool.join()
 
         return issue
 
@@ -562,4 +567,3 @@ def _normalize_batch_name(batch_name):
         _logger.error(msg)
         raise BatchLoaderException(msg)
     return batch_name
-
