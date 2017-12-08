@@ -22,3 +22,7 @@ class OcrExtractorTests(TestCase):
         # trailing punctuation in highlighted text
         self.assertTrue(coords.has_key('Craft'))
         self.assertTrue(not coords.has_key('Craft.'))
+
+if __name__ == '__main__':
+    import unittest
+    unittest.main()
