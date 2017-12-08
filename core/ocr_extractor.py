@@ -1,3 +1,5 @@
+# encoding: utf-8
+from __future__ import absolute_import, print_function
 import re
 
 from xml.sax.handler import ContentHandler, feature_namespaces
@@ -76,3 +78,14 @@ def ocr_extractor(ocr_file):
     parser.parse(ocr_file)
  
     return handler.lang_text(), handler.coords()
+
+
+if __name__ == '__main__':
+    from timeit import default_timer
+    import sys
+
+    for f in sys.argv[1:]:
+        start_time = default_timer()
+        text, coords = ocr_extractor(f)
+        elapsed_time = default_timer() - start_time
+        print('Parsed %s in %0.04f seconds' % (f, elapsed_time))
