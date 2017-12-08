@@ -19,6 +19,8 @@ from django.db.models import Q
 from lxml import etree
 from solr import SolrConnection
 
+from tqdm import tqdm
+
 from chronam.core import models
 from chronam.core.models import (OCR, Awardee, Batch, Issue, LoadBatchEvent,
                                  Page, Title,)
@@ -99,6 +101,7 @@ class BatchLoader(object):
         self.pages_processed = 0
 
         logging.info("loading batch at %s", batch_path)
+
         dirname, batch_name = os.path.split(batch_path.rstrip("/"))
         if dirname:
             batch_source = None
@@ -137,7 +140,7 @@ class BatchLoader(object):
             # parse the batch.xml and load up each issue mets file
             doc = etree.parse(batch.validated_batch_url)
 
-            for e in doc.xpath('ndnp:reel', namespaces=ns):
+            for e in tqdm(doc.xpath('ndnp:reel', namespaces=ns), desc="ndnp:reel"):
 
                 reel_number = e.attrib['reelNumber'].strip()
 
@@ -148,7 +151,7 @@ class BatchLoader(object):
                     reel = models.Reel(number=reel_number, batch=batch)
                     reel.save()
 
-            for e in doc.xpath('ndnp:issue', namespaces=ns):
+            for e in tqdm(doc.xpath('ndnp:issue', namespaces=ns), desc="ndnp:issue"):
                 mets_url = urlparse.urljoin(batch.storage_url, e.text)
 
                 try:
@@ -256,7 +259,7 @@ class BatchLoader(object):
         LOGGER.debug("saved issue: %s", issue.url)
 
         notes = []
-        for mods_note in mods.xpath('.//mods:note', namespaces=ns):
+        for mods_note in tqdm(mods.xpath('.//mods:note', namespaces=ns), desc="notes"):
             type = mods_note.xpath('string(./@type)')
             label = mods_note.xpath('string(./@displayLabel)')
             text = mods_note.xpath('string(.)')
@@ -266,8 +269,7 @@ class BatchLoader(object):
         issue.save()
 
         # attach pages: lots of logging because it's expensive
-        for page_div in div.xpath('.//mets:div[@TYPE="np:page"]',
-                                  namespaces=ns):
+        for page_div in tqdm(div.xpath('.//mets:div[@TYPE="np:page"]', namespaces=ns), desc="pages"):
             try:
                 self._load_page(doc, page_div, issue)
                 self.pages_processed += 1
@@ -332,7 +334,7 @@ class BatchLoader(object):
         page.save()
 
         notes = []
-        for mods_note in mods.xpath('.//mods:note', namespaces=ns):
+        for mods_note in tqdm(mods.xpath('.//mods:note', namespaces=ns), desc="mods:note"):
             type = mods_note.xpath('string(./@type)')
             label = mods_note.xpath('string(./@displayLabel)')
             text = mods_note.xpath('string(.)').strip()
@@ -346,15 +348,13 @@ class BatchLoader(object):
         # structmap and then use it to look up the file details in the
         # larger document.
 
-        for fptr in div.xpath('./mets:fptr', namespaces=ns):
+        for fptr in tqdm(div.xpath('./mets:fptr', namespaces=ns), desc="mets:fptr"):
             file_id = fptr.attrib['FILEID']
-            file_el = doc.xpath('.//mets:file[@ID="%s"]' % file_id,
-                namespaces=ns)[0]
+            file_el = doc.xpath('.//mets:file[@ID="%s"]' % file_id, namespaces=ns)[0]
             file_type = file_el.attrib['USE']
 
             # get the filename relative to the storage location
-            file_name = file_el.xpath('string(./mets:FLocat/@xlink:href)',
-                namespaces=ns)
+            file_name = file_el.xpath('string(./mets:FLocat/@xlink:href)', namespaces=ns)
             file_name = urlparse.urljoin(doc.docinfo.URL, file_name)
             file_name = self.storage_relative_path(file_name)
 
@@ -447,8 +447,8 @@ class BatchLoader(object):
         try:
             batch = self._get_batch(batch_name, batch_source, create=False)
             self.current_batch = batch
-            for issue in batch.issues.all():
-                for page in issue.pages.all():
+            for issue in tqdm(batch.issues.all(), desc="batch"):
+                for page in tqdm(issue.pages.all(), desc="page"):
                     if not page.ocr_filename:
                         logging.warn("Batch [%s] has page [%s] that has no OCR. Skipping processing coordinates for page." % (batch_name, page))
                     else:
@@ -494,8 +494,8 @@ class BatchLoader(object):
         batch_name = batch.name
         # just delete batch causes memory to bloat out
         # so we do it piece-meal
-        for issue in batch.issues.all():
-            for page in issue.pages.all():
+        for issue in tqdm(batch.issues.all(), "issue"):
+            for page in tqdm(issue.pages.all(), "pages"):
                 page.delete()
                 # remove coordinates
                 if os.path.exists(models.coordinates_path(page._url_parts())):
