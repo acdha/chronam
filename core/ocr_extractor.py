@@ -33,12 +33,8 @@ class OCRHandler(ContentHandler):
             # which removes it from highlighting, so it's important to remove
             # it here as well or else we'll look up words that don't match
             word = non_lexemes.sub('', content)
-            if word == "":
-                pass
-            elif word in self._coords:
-                self._coords[word].append(coord)
-            else:
-                self._coords[word] = [coord]
+            if word:
+                self._coords.setdefault(word, []).append(coord)
         elif tag == 'Page':
             assert self.width is None
             assert self.height is None
@@ -53,10 +49,7 @@ class OCRHandler(ContentHandler):
 
             self._line.clear()
 
-            if self._language in self._page:
-                self._page[self._language].append(l)
-            else:
-                self._page[self._language] = [l]
+            self._page.setdefault(self._language, []).append(l)
 
         if tag == 'Page':
             for l in self._page.keys():
