@@ -1,6 +1,8 @@
 # encoding: utf-8
 from __future__ import absolute_import, print_function
 
+from collections import deque
+
 import re
 from xml.sax import make_parser
 from xml.sax.handler import ContentHandler, feature_namespaces
@@ -13,7 +15,7 @@ class OCRHandler(ContentHandler):
 
     def __init__(self):
         self._page = {}
-        self._line = []
+        self._line = deque()
         self._coords = {}
         self._language = 'eng'
         self.width = None
@@ -48,12 +50,14 @@ class OCRHandler(ContentHandler):
     def endElement(self, tag):
         if tag == 'TextLine':
             l = ' '.join(self._line)
-            self._line = []
+
+            self._line.clear()
+
             if self._language in self._page:
                 self._page[self._language].append(l)
             else:
                 self._page[self._language] = [l]
-            self._line = []
+
         if tag == 'Page':
             for l in self._page.keys():
                 self._page[l] = '\n'.join(self._page[l])
